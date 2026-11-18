@@ -66,8 +66,29 @@
       .then(function (r) { return 'status=' + r.status; })
       .catch(function (e) { return 'ERR=' + (e && e.name); });
   }
-  checkLocalService('http', 8008, '/setup/eureka_info').then(function (r) { out('local8008', r); });
-  checkLocalService('https', 8443, '/setup/eureka_info').then(function (r) { out('local8443', r); });
+  // Identify WHAT answers, not just the status code: a proxy and the device's
+  // own server both return 404, but with different bodies.
+  function describe(url) {
+    return fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var snippet = (t || '').replace(/\s+/g, ' ').slice(0, 60);
+          return 'status=' + r.status + ' ct=' + (r.headers.get('content-type') || '-') +
+                 ' body=' + (snippet || '(empty)');
+        });
+      })
+      .catch(function (e) { return 'ERR=' + (e && e.name); });
+  }
+  var urls = [
+    ['8008-root',   'http://127.0.0.1:8008/'],
+    ['8008-eureka', 'http://127.0.0.1:8008/setup/eureka_info'],
+    ['8008-lh',     'http://localhost:8008/setup/eureka_info'],
+    ['8008-ipv6',   'http://[::1]:8008/setup/eureka_info'],
+    ['8008-report', 'http://127.0.0.1:8008/setup/get_log_report']
+  ];
+  urls.forEach(function (pair) {
+    describe(pair[1]).then(function (r) { out('svc', pair[0], r); });
+  });
 
   // --- Cast wiring -------------------------------------------------------
   try {
