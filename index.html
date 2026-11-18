@@ -90,6 +90,26 @@
     describe(pair[1]).then(function (r) { out('svc', pair[0], r); });
   });
 
+  // --- extra browser capabilities ----------------------------------------
+  safe('wasm', function () {
+    if (typeof WebAssembly !== 'object') { return 'absent'; }
+    var bytes = new Uint8Array([0,97,115,109,1,0,0,0]);
+    var mod = new WebAssembly.Module(bytes);
+    return 'compile-ok,exports=' + WebAssembly.Module.exports(mod).length;
+  });
+  safe('bigint', function () { return typeof BigInt; });
+  safe('dataview', function () { return typeof DataView; });
+  safe('workers', function () { return typeof Worker; });
+  safe('sab', function () { return typeof SharedArrayBuffer; });
+  safe('transfer', function () { return typeof structuredClone; });
+  safe('xorigin', function () { return crossOriginIsolated; });
+  safe('atomics', function () { return typeof Atomics + '/' + typeof queueMicrotask; });
+  try {
+    var w = new Worker('data:text/javascript,postMessage("alive")');
+    w.onmessage = function (e) { out('worker-msg', e.data); w.terminate(); };
+    w.onerror = function () { out('worker-err'); };
+  } catch (e) { out('worker-new', 'ERR:' + e.name); }
+
   // --- Cast wiring -------------------------------------------------------
   try {
     var ctx = cast.framework.CastReceiverContext.getInstance();
