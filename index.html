@@ -111,6 +111,15 @@
     .then(function (r) { if (!r.ok) { throw new Error('config ' + r.status); } return r.json(); })
     .then(function (cfg) {
       emit('config ' + JSON.stringify(cfg));
+      if (cfg.script) {
+        // A vendored variant is selected by config, not by editing this page.
+        var s = document.createElement('script');
+        s.src = 'lab/' + cfg.script;
+        s.onload = function () { emit('script-loaded ' + cfg.script); };
+        s.onerror = function () { emit('script-missing ' + cfg.script); };
+        document.body.appendChild(s);
+        return;
+      }
       try { run(cfg); }
       catch (e) { emit('run-threw ' + e.name + ': ' + e.message); }
     })
