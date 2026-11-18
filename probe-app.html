@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Clock Info</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #9f9; font: 14px monospace; }
+  #log { padding: 8px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="log"></div>
+
+<!-- Cast Receiver framework. Must be v3; CAF rejects older majors. -->
+<script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // Every line is prefixed so the device log can be grepped for it:
+  //   console.log -> "Cast App (...) : \" [0.1s] [clockinfo] ..." in dumpstate
+  var TAG = '[clockinfo]';
+  var lines = [];
+
+  function out() {
+    var parts = [];
+    for (var i = 0; i < arguments.length; i++) {
+      try { parts.push(String(arguments[i])); } catch (e) { parts.push('?'); }
+    }
+    var line = TAG + ' ' + parts.join(' ');
+    lines.push(line);
+    try { console.log(line); } catch (e) {}
+    var el = document.getElementById('log');
+    if (el) { el.textContent = lines.join('\n'); }
+  }
+
+  function safe(name, fn) {
+    try { out(name + '=' + fn()); } catch (e) { out(name + '=ERR:' + (e && e.name)); }
+  }
+
+  out('boot', 'href=' + location.href, 'secure=' + (location.protocol === 'https:'));
+
+  // --- fingerprint -------------------------------------------------------
+  safe('ua', function () { return navigator.userAgent; });
+  safe('platform', function () { return navigator.platform; });
+  safe('lang', function () { return navigator.language; });
+  safe('cores', function () { return navigator.hardwareConcurrency; });
+  safe('dpr', function () { return window.devicePixelRatio; });
+  safe('screen', function () { return screen.width + 'x' + screen.height; });
+  safe('webgl', function () {
+    var c = document.createElement('canvas');
+    var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (!gl) { return 'none'; }
+    var d = gl.getExtension('WEBGL_debug_renderer_info');
+    return (d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+  });
+  safe('es6', function () { return (typeof Promise !== 'undefined') + '/' + (typeof Symbol !== 'undefined'); });
+  safe('storage', function () { return (typeof localStorage) + '/' + (typeof indexedDB); });
+
+  // --- is the local management service reachable from the receiver? ------
+  // Many receivers report service availability so a sender can show status.
+  // The page is https, so http:// is mixed content; either outcome is logged.
+  function checkLocalService(scheme, port, path) {
+    var url = scheme + '://127.0.0.1:' + port + path;
+    return fetch(url, { mode: 'cors', credentials: 'omit' })
+      .then(function (r) { return 'status=' + r.status; })
+      .catch(function (e) { return 'ERR=' + (e && e.name); });
+  }
+  // Identify WHAT answers, not just the status code: a proxy and the device's
+  // own server both return 404, but with different bodies.
+  function describe(url) {
+    return fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var snippet = (t || '').replace(/\s+/g, ' ').slice(0, 60);
+          return 'status=' + r.status + ' ct=' + (r.headers.get('content-type') || '-') +
+                 ' body=' + (snippet || '(empty)');
+        });
+      })
+      .catch(function (e) { return 'ERR=' + (e && e.name); });
+  }
+  var urls = [
+    ['8008-base',   'http://127.0.0.1:8008/'],
+    ['8008-eureka', 'http://127.0.0.1:8008/setup/eureka_info'],
+    ['8008-lh',     'http://localhost:8008/setup/eureka_info'],
+    ['8008-ipv6',   'http://[::1]:8008/setup/eureka_info'],
+    ['8008-report', 'http://127.0.0.1:8008/setup/get_log_report']
+  ];
+  urls.forEach(function (pair) {
+    describe(pair[1]).then(function (r) { out('svc', pair[0], r); });
+  });
+
+  // --- extra browser capabilities ----------------------------------------
+  safe('wasm', function () {
+    if (typeof WebAssembly !== 'object') { return 'absent'; }
+    var bytes = new Uint8Array([0,97,115,109,1,0,0,0]);
+    var mod = new WebAssembly.Module(bytes);
+    return 'compile-ok,exports=' + WebAssembly.Module.exports(mod).length;
+  });
+  safe('bigint', function () { return typeof BigInt; });
+  safe('dataview', function () { return typeof DataView; });
+  safe('workers', function () { return typeof Worker; });
+  safe('sab', function () { return typeof SharedArrayBuffer; });
+  safe('transfer', function () { return typeof structuredClone; });
+  safe('xorigin', function () { return crossOriginIsolated; });
+  safe('atomics', function () { return typeof Atomics + '/' + typeof queueMicrotask; });
+  try {
+    var w = new Worker('data:text/javascript,postMessage("alive")');
+    w.onmessage = function (e) { out('worker-msg', e.data); w.terminate(); };
+    w.onerror = function () { out('worker-err'); };
+  } catch (e) { out('worker-new', 'ERR:' + e.name); }
+
+  // --- Cast wiring -------------------------------------------------------
+  try {
+    var ctx = cast.framework.CastReceiverContext.getInstance();
+    var NS = 'urn:x-cast:com.clock.info';
+
+    // Custom namespace: lets us send commands from the host and read replies
+    // out of the device log.
+    ctx.addCustomMessageListener(NS, function (event) {
+      out('recv', JSON.stringify(event.data || {}));
+    });
+
+    if (cast.framework.system && cast.framework.system.EventType) {
+      ctx.addEventListener(cast.framework.system.EventType.READY, function () { out('ready'); });
+      ctx.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, function () { out('sender-connected'); });
+    }
+
+    // Behave like an ordinary media receiver: report playback so a sender's
+    // Now-Playing view has something to show.
+    if (cast.framework.events && cast.framework.events.EventType) {
+      ctx.addEventListener(cast.framework.events.EventType.MEDIA_STATUS,
+        function (e) { out('media-status', (e && e.mediaStatus && e.mediaStatus.playerState) || 'n/a'); });
+    }
+
+    ctx.start();
+    out('started');
+  } catch (e) {
+    out('CAST_ERR', (e && e.message) || e);
+  }
+}());
+</script>
+</body>
+</html>
