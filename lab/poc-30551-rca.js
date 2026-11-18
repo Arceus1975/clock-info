@@ -65,6 +65,18 @@ jit = (object) => {
   return object.corrupted_prop[0];
 };
 
+function describe(label, o) {
+  var t = typeof o;
+  var own = 'n/a';
+  try { own = Object.getOwnPropertyNames(o).join(','); } catch (e) { own = 'err'; }
+  var proto = 'null';
+  try { proto = o.__proto__ === null ? 'null' : typeof o.__proto__; } catch (e) { proto = 'err'; }
+  print('[+]' + label + ' typeof=' + t + ' own=[' + own + '] proto=' + proto);
+}
+describe('obj1', object_1);
+describe('obj2', object_2);
+describe('cp1-value', object_1.corrupted_prop);
+describe('cp2-value', object_2.corrupted_prop);
 print('[+]warmup-start');
 for (var i = 0; i < 100000; ++i) { jit(object_1); }
 print('[+]warmup-done');
