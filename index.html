@@ -14,8 +14,9 @@
 <!-- Reporting channel is the device log, grepped for [clocklab]. -->
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <script>
+// NOTE: deliberately NOT strict mode. The upstream trigger assigns to an
+// undeclared global, which strict mode turns into a ReferenceError.
 (function () {
-  'use strict';
   var TAG = '[clocklab]';
   var CONFIG = 'lab/config.json';
 
