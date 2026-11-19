@@ -11,7 +11,7 @@ function sleep(miliseconds) {
 var initKey = {init : 1};
 var level = 4;
 var map1 = new WeakMap();
-var gcSize = 0x20000000;   // upstream 0x4fe00000 (1.34 GB) exceeds this device
+var gcSize = 0x08000000;   // upstream 0x4fe00000 (1.34 GB) fails here; 128 MB
 
 //Get mapAddr using DebugPrint for double array (the compressed address of the map)
 var mapAddr = 0x8203ae1;
