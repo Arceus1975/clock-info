@@ -20,7 +20,7 @@ target = null;
 
 var keep = [];
 var step = 0;
-var STEPS = 60;          // 60 x 8 MB = 480 MB target
+var STEPS = 28;          // ~112 MB: under the ~120-150 MB renderer ceiling measured
 var PER = 500000;        // 4 MB per chunk (doubles)
 
 say('begin ref=' + (ref.deref() === undefined ? 'collected' : 'alive') + ' ' + heap());
