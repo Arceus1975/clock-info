@@ -69,10 +69,13 @@ function setUpWeakMap(map) {
 
 var trials = 0;
 var hits = 0;
-var rounds = 60;
+var rounds = 150;
 
 for (var r = 0; r < rounds; r++) {
   try {
+    // Fresh map each round: the RCA reuses one global, but that accumulates
+    // entries and changes the ephemeron ordering the bug depends on.
+    map1 = new WeakMap();
     var refs = setUpWeakMap(map1);
     new ArrayBuffer(GC_SIZE);
     let hiddenKey = getHiddenKey(map1, level, initKey);
