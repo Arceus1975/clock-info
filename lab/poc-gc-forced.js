@@ -18,13 +18,16 @@ function allocateUntilRefused() {
   var objects = 0;
   var blocks = 0;
   var failure = 'cap';
-  var unit = new Array(1024 * 1024).join('x');   // ~1 MB, built once
+  // Cons strings (`a + b`) are tiny and never copy, so use densely filled arrays
+  // instead: 1e6 doubles is ~8 MB of real on-heap storage each.
   try {
-    while (blocks < 4000) {
-      keep.push(unit + blocks);                    // unique cons string, kept alive
+    while (blocks < 400) {
+      var block = new Array(1000000);
+      block.fill(1.1);
+      keep.push(block);
       objects += 1;
       blocks++;
-      if (blocks % 50 === 0) { say('progress MB=' + blocks); }
+      if (blocks % 20 === 0) { say('progress blocks=' + blocks); }
     }
   } catch (e) { failure = e.name; }
   // keep is released here; the collection (if any) happens while it is still held
