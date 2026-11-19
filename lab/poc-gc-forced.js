@@ -12,18 +12,19 @@ var ref = new WeakRef(target);
 target = null;
 
 function allocateUntilRefused() {
+  // Large on-heap strings: one 1 MB string per entry fills the heap far faster
+  // than many small objects, so a refusal is reachable in seconds.
   var keep = [];
   var objects = 0;
   var blocks = 0;
   var failure = 'cap';
+  var unit = new Array(1024 * 1024).join('x');   // ~1 MB, built once
   try {
-    while (blocks < 20000) {
-      var block = new Array(5000);
-      for (var i = 0; i < 5000; i++) { block[i] = { i: i, s: 'pad' + i }; }
-      keep.push(block);
-      objects += 5000;
+    while (blocks < 4000) {
+      keep.push(unit + blocks);                    // unique cons string, kept alive
+      objects += 1;
       blocks++;
-      if (blocks % 200 === 0) { say('progress objects=' + objects); }
+      if (blocks % 50 === 0) { say('progress MB=' + blocks); }
     }
   } catch (e) { failure = e.name; }
   // keep is released here; the collection (if any) happens while it is still held
