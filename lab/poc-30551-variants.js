@@ -79,4 +79,63 @@ p = buildPair(function () { return [1.1]; }, function () { return 2261620.509803
 p[1].corrupted_prop = [1.1, 2.2];
 run('v4-restore', p[0], p[1], false);
 
+// v5: grow the receiver's map inside the handler, so the transition created by
+// the handler belongs to a superseded map and the search may miss.
+function buildGrow(makeValue1, makeValue2) {
+  var global_object = {};
+  var v1 = makeValue1(), v2 = makeValue2();
+  var o1 = { __proto__: global_object }; o1.regular_prop = 1;
+  var o2 = { __proto__: global_object }; o2.regular_prop = 1;
+  function setVia(object, value, handler) {
+    var embed = document.createElement('embed');
+    embed.onload = handler; embed.type = 'text/html';
+    Object.setPrototypeOf(global_object, embed);
+    document.body.appendChild(embed);
+    object.corrupted_prop = value;
+    embed.remove();
+  }
+  setVia(o1, v2, function () {
+    Object.setPrototypeOf(global_object, null);
+    o1.corrupted_prop = v1;
+    o1.grow_a = 2; o1.grow_b = 3; o1.grow_c = 4;
+  });
+  setVia(o2, v2, function () {
+    Object.setPrototypeOf(global_object, null);
+    o2.corrupted_prop = v1;
+    o1.regular_prop = 1.1;
+  });
+  return [o1, o2];
+}
+p = buildGrow(function () { return [1.1]; }, function () { return 2261620.509803918; });
+run('v5-grow-map', p[0], p[1], false);
+
+// v6: receiver forced to dictionary mode before the pair.
+function buildDict() {
+  var global_object = {};
+  var v1 = [1.1], v2 = 2261620.509803918;
+  var o1 = { __proto__: global_object }; o1.regular_prop = 1;
+  var o2 = { __proto__: global_object }; o2.regular_prop = 1;
+  for (var d = 0; d < 64; d++) { o1['pad' + d] = d; o2['pad' + d] = d; }
+  function setVia(object, value, handler) {
+    var embed = document.createElement('embed');
+    embed.onload = handler; embed.type = 'text/html';
+    Object.setPrototypeOf(global_object, embed);
+    document.body.appendChild(embed);
+    object.corrupted_prop = value;
+    embed.remove();
+  }
+  setVia(o1, v2, function () {
+    Object.setPrototypeOf(global_object, null);
+    o1.corrupted_prop = v1;
+  });
+  setVia(o2, v2, function () {
+    Object.setPrototypeOf(global_object, null);
+    o2.corrupted_prop = v1;
+    o1.regular_prop = 1.1;
+  });
+  return [o1, o2];
+}
+p = buildDict();
+run('v6-dictionary', p[0], p[1], false);
+
 print('[+]variants-done');
