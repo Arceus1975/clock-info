@@ -29,32 +29,30 @@ function externalPressure(chunks, size) {
 
 print('[+]weakref-support ' + (typeof WeakRef));
 
+// WeakRef keeps its target alive for the CURRENT JOB, so deref() must be taken
+// in a later task. Checking synchronously always reports 'alive' — an earlier
+// revision did exactly that.
 function probe(label, pressureFn) {
-  var target = { alive: label };
-  var refs = [new WeakRef(target)];
-  target = null;
-  pressureFn();
-  var seen = [];
-  for (var i = 0; i < refs.length; i++) {
-    seen.push(refs[i].deref() === undefined ? 'collected' : 'alive');
-  }
-  print('[+]probe ' + label + ' => ' + seen.join(','));
-  refs = null;
+  return new Promise(function (resolve) {
+    var target = { alive: label };
+    var ref = new WeakRef(target);
+    target = null;
+    pressureFn();
+    setTimeout(function () {
+      var state = ref.deref() === undefined ? 'collected' : 'alive';
+      print('[+]probe ' + label + ' => ' + state);
+      resolve();
+    }, 0);
+  });
 }
 
-// control: no pressure at all
-probe('no-pressure', function () { });
-
-// on-heap pressure
-probe('onheap-200k', function () { onHeapPressure(400, 500); });
-probe('onheap-600k', function () { onHeapPressure(1200, 500); });
-
-// external pressure (off-heap; kept for comparison)
-probe('external-128MB', function () { externalPressure(2, 0x04000000); });
-
-// repeated small allocations, the pattern most likely to trigger scavenges
-probe('churn-1m', function () {
-  for (var i = 0; i < 1000000; i++) { var t = { a: i }; }
-});
-
-print('[+]gc-oracle-done');
+// Sequential, each awaiting a task boundary before the deref.
+Promise.resolve()
+  .then(function () { return probe('no-pressure', function () { }); })
+  .then(function () { return probe('onheap-200k', function () { onHeapPressure(400, 500); }); })
+  .then(function () { return probe('onheap-600k', function () { onHeapPressure(1200, 500); }); })
+  .then(function () { return probe('external-128MB', function () { externalPressure(2, 0x04000000); }); })
+  .then(function () { return probe('churn-1m', function () {
+      for (var i = 0; i < 1000000; i++) { var t = { a: i }; }
+    }); })
+  .then(function () { print('[+]gc-oracle-done'); });
