@@ -21,15 +21,15 @@ function allocateUntilRefused() {
   // Cons strings (`a + b`) are tiny and never copy, so use densely filled arrays
   // instead: 1e6 doubles is ~8 MB of real on-heap storage each.
   try {
-    while (blocks < 48) {
+    while (blocks < 80) {
       // 8M doubles ≈ 64 MB per block: the same pressure in far fewer steps,
       // because per-block cost dominates at 1M.
-      var block = new Array(8000000);
+      var block = new Array(2000000);
       block.fill(1.1);
       keep.push(block);
       objects += 1;
       blocks++;
-      if (blocks % 2 === 0) { say('progress blocks=' + blocks); }
+      if (blocks % 10 === 0) { say('progress blocks=' + blocks); }
     }
   } catch (e) { failure = e.name; }
   // keep is released here; the collection (if any) happens while it is still held
