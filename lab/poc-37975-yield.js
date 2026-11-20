@@ -42,7 +42,7 @@ function setUpWeakMap(map) {
   map7.set(k8, map8); map7.set(k7, k8); map8.set(k8, k9);
 }
 
-var rounds = 4;
+var rounds = 15;
 var hits = 0;
 var trial = 0;
 
