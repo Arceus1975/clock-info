@@ -53,6 +53,15 @@
     tryFetch(pair[1]).then(function (r) { emit('free ' + pair[0] + ' ' + r); });
   });
 
+  // ---- localhost probes: does the clock treat its own ports differently? ----
+  [['lo-8008', 'http://127.0.0.1:8008/setup/eureka_info'],
+   ['lo-8443', 'https://127.0.0.1:8443/setup/eureka_info'],
+   ['lo-8012', 'https://127.0.0.1:8012/'],
+   ['lo-8012h2', 'https://127.0.0.1:8012/chromecast.CastIpcService/GetPlatformInformation'],
+   ['lo-9000', 'https://127.0.0.1:9000/']].forEach(function (pair) {
+    tryFetch(pair[1]).then(function (r) { emit('LOPROBE ' + pair[0] + ' ' + r); });
+  });
+
   // ---- XHR fallback: fetch() may reject file:// even when XHR can read it ----
   function tryXhr(url, binary) {
     try {
